@@ -1,63 +1,37 @@
-CC ?= gcc
-CFLAGS ?= -O2 -Wall -Wextra
-PREFIX ?= /usr/local
+CC = gcc
+CFLAGS = -Wall -Wextra -O2 -I.
+LDFLAGS = -lwayland-client -lm
 
-WAY_CFLAGS := $(shell pkg-config --cflags wayland-client)
-WAY_LIBS   := $(shell pkg-config --libs wayland-client)
+WAYLAND_SCANNER = wayland-scanner
 
-BIN = wl-paper
+PROTOCOL_HEADERS = \
+	xdg-shell-client-protocol.h \
+	wlr-layer-shell-unstable-v1-client-protocol.h
 
-STB_URL = https://raw.githubusercontent.com/nothings/stb/master/stb_image.h
-WLR_URL = https://gitlab.freedesktop.org/wlroots/wlr-protocols/-/raw/master/unstable/wlr-layer-shell-unstable-v1.xml
-XDG_URL = https://gitlab.freedesktop.org/wayland/wayland-protocols/-/raw/main/stable/xdg-shell/xdg-shell.xml
+PROTOCOL_SOURCES = \
+	xdg-shell-protocol.c \
+	wlr-layer-shell-unstable-v1-protocol.c
 
-STB_H = stb_image.h
-WLR_XML = protocols/wlr-layer-shell-unstable-v1.xml
-XDG_XML = protocols/xdg-shell.xml
+TARGET = wl-paper
 
-GEN_WLR_H = wlr-layer-shell-unstable-v1-client-protocol.h
-GEN_WLR_C = wlr-layer-shell-unstable-v1-protocol.c
-# The layer-shell protocol refers to xdg_popup, so its code needs this object at link time.
-GEN_XDG_C = xdg-shell-protocol.c
+all: $(TARGET)
 
-all: $(BIN)
+xdg-shell-client-protocol.h: protocols/xdg-shell.xml
+	$(WAYLAND_SCANNER) client-header $< $@
 
-deps: $(STB_H) $(WLR_XML) $(XDG_XML)
+xdg-shell-protocol.c: protocols/xdg-shell.xml
+	$(WAYLAND_SCANNER) private-code $< $@
 
-$(STB_H):
-	curl -sL $(STB_URL) -o $@
+wlr-layer-shell-unstable-v1-client-protocol.h: protocols/wlr-layer-shell-unstable-v1.xml
+	$(WAYLAND_SCANNER) client-header $< $@
 
-$(WLR_XML):
-	mkdir -p protocols
-	curl -sL $(WLR_URL) -o $@
+wlr-layer-shell-unstable-v1-protocol.c: protocols/wlr-layer-shell-unstable-v1.xml
+	$(WAYLAND_SCANNER) private-code $< $@
 
-$(XDG_XML):
-	mkdir -p protocols
-	curl -sL $(XDG_URL) -o $@
-
-$(GEN_WLR_H): $(WLR_XML)
-	wayland-scanner client-header $< $@
-
-$(GEN_WLR_C): $(WLR_XML)
-	wayland-scanner private-code $< $@
-
-$(GEN_XDG_C): $(XDG_XML)
-	wayland-scanner private-code $< $@
-
-$(BIN): main.c $(STB_H) $(GEN_WLR_H) $(GEN_WLR_C) $(GEN_XDG_C)
-	$(CC) $(CFLAGS) $(WAY_CFLAGS) -o $@ main.c $(GEN_WLR_C) $(GEN_XDG_C) $(WAY_LIBS)
+$(TARGET): $(PROTOCOL_HEADERS) $(PROTOCOL_SOURCES) main.c
+	$(CC) $(CFLAGS) -o $(TARGET) main.c $(PROTOCOL_SOURCES) $(LDFLAGS)
 
 clean:
-	rm -f $(BIN) $(GEN_WLR_H) $(GEN_WLR_C) $(GEN_XDG_C)
+	rm -f $(TARGET) $(PROTOCOL_HEADERS) $(PROTOCOL_SOURCES)
 
-distclean: clean
-	rm -f $(STB_H)
-	rm -rf protocols
-
-install: $(BIN)
-	install -Dm755 $(BIN) $(DESTDIR)$(PREFIX)/bin/$(BIN)
-
-uninstall:
-	rm -f $(DESTDIR)$(PREFIX)/bin/$(BIN)
-
-.PHONY: all deps clean distclean install uninstall
+.PHONY: all clean
